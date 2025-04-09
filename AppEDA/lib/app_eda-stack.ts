@@ -44,6 +44,16 @@ export class AppEdaStack extends cdk.Stack {
       },
     });
 
+    const metadataUpdatingFn = new lambdanode.NodejsFunction(this, "MetadataUpdatingFn", {
+      runtime: lambda.Runtime.NODEJS_18_X,
+      entry: `${__dirname}/../lambdas/metadataUpdating.ts`,
+      timeout: cdk.Duration.seconds(15),
+      memorySize: 128,
+      environment: {
+        IMAGES_TABLE_NAME: imagesDatabaseTable.tableName,
+      },
+    });
+
     const logNewImageEventSource = new events.SqsEventSource(imageProcessQueue, {
       batchSize: 5,
     });
@@ -51,6 +61,10 @@ export class AppEdaStack extends cdk.Stack {
 
     imageTopic.addSubscription(
       new subs.SqsSubscription(imageProcessQueue)
+    );
+
+    imageTopic.addSubscription(
+      new subs.LambdaSubscription(metadataUpdatingFn)
     );
 
     imagesBucket.addEventNotification(
@@ -66,8 +80,20 @@ export class AppEdaStack extends cdk.Stack {
       })
     );
 
+    metadataUpdatingFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ["dynamodb:UpdateItem"],
+        resources: [imagesDatabaseTable.tableArn],
+      })
+    );
+
     new cdk.CfnOutput(this, "bucketName", {
       value: imagesBucket.bucketName,
+    });
+
+    new cdk.CfnOutput(this, "imageTopicArn", {
+      value: imageTopic.topicArn,
     });
   }
 }
