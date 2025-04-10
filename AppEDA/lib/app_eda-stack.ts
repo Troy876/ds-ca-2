@@ -25,6 +25,7 @@ export class AppEdaStack extends cdk.Stack {
       partitionKey: { name: "imageName", type: dynamodb.AttributeType.STRING },
       removalPolicy: cdk.RemovalPolicy.DESTROY,
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      stream: dynamodb.StreamViewType.NEW_IMAGE,
     });
 
     const imageDeadLetterQueue = new sqs.Queue(this, "ImageDeadLetterQueue", {
@@ -37,6 +38,10 @@ export class AppEdaStack extends cdk.Stack {
         queue: imageDeadLetterQueue,
         maxReceiveCount: 1,
       }
+    });
+
+    const mailerQueue = new sqs.Queue(this, "MailerQueue", {
+      receiveMessageWaitTime: cdk.Duration.seconds(10),
     });
 
     const imageTopic = new sns.Topic(this, "ImageTopic", {
@@ -81,6 +86,13 @@ export class AppEdaStack extends cdk.Stack {
       },
     });
 
+    const mailerFn = new lambdanode.NodejsFunction(this, "MailerFn", {
+      runtime: lambda.Runtime.NODEJS_18_X,
+      memorySize: 1024,
+      timeout: cdk.Duration.seconds(3),
+      entry: `${__dirname}/../lambdas/mailer.ts`,
+    });
+
     const logNewImageEventSource = new events.SqsEventSource(imageProcessQueue, {
       batchSize: 5,
     });
@@ -90,6 +102,12 @@ export class AppEdaStack extends cdk.Stack {
       batchSize: 5,
     });
     removeInvalidImageFn.addEventSource(removeInvalidImageEventSource);
+
+    const MailerEventSource = new events.DynamoEventSource(imagesDatabaseTable, {
+      startingPosition: lambda.StartingPosition.TRIM_HORIZON,
+      batchSize: 5,
+    });
+    mailerFn.addEventSource(MailerEventSource);
 
     imageTopic.addSubscription(
       new subs.SqsSubscription(imageProcessQueue)
@@ -101,6 +119,10 @@ export class AppEdaStack extends cdk.Stack {
 
     imageTopic.addSubscription(
       new subs.LambdaSubscription(statusUpdatingFn)
+    );
+
+    imageTopic.addSubscription(
+      new subs.SqsSubscription(mailerQueue)
     );
 
     imagesBucket.addEventNotification(
@@ -152,5 +174,17 @@ export class AppEdaStack extends cdk.Stack {
     new cdk.CfnOutput(this, "imageTopicArn", {
       value: imageTopic.topicArn,
     });
+
+    mailerFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: [
+          "ses:SendEmail",
+          "ses:SendRawEmail",
+          "ses:SendTemplatedEmail",
+        ],
+        resources: ["*"],
+      })
+    );
   }
 }
