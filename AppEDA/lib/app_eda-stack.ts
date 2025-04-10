@@ -27,8 +27,16 @@ export class AppEdaStack extends cdk.Stack {
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
     });
 
+    const imageDeadLetterQueue = new sqs.Queue(this, "ImageDeadLetterQueue", {
+      retentionPeriod: cdk.Duration.days(14),
+    })
+
     const imageProcessQueue = new sqs.Queue(this, "image-queue", {
       receiveMessageWaitTime: cdk.Duration.seconds(10),
+      deadLetterQueue: {
+        queue: imageDeadLetterQueue,
+        maxReceiveCount: 1,
+      }
     });
 
     const imageTopic = new sns.Topic(this, "ImageTopic", {
@@ -54,10 +62,24 @@ export class AppEdaStack extends cdk.Stack {
       },
     });
 
+    const removeInvalidImageFn = new lambdanode.NodejsFunction(this, 'RemoveInvalidImageFn', {
+      runtime: lambda.Runtime.NODEJS_18_X,
+      entry: `${__dirname}/../lambdas/removeInvalidImage.ts`,
+      timeout: cdk.Duration.seconds(15),
+      environment: {
+        BUCKET_NAME: imagesBucket.bucketName,
+      }
+    });
+
     const logNewImageEventSource = new events.SqsEventSource(imageProcessQueue, {
       batchSize: 5,
     });
     logNewImageFn.addEventSource(logNewImageEventSource);
+
+    const removeInvalidImageEventSource = new events.SqsEventSource(imageDeadLetterQueue, {
+      batchSize: 5,
+    });
+    removeInvalidImageFn.addEventSource(removeInvalidImageEventSource);
 
     imageTopic.addSubscription(
       new subs.SqsSubscription(imageProcessQueue)
@@ -72,10 +94,15 @@ export class AppEdaStack extends cdk.Stack {
       new s3n.SnsDestination(imageTopic)
     );
 
+    imagesBucket.addEventNotification(
+      s3.EventType.OBJECT_REMOVED,
+      new s3n.SnsDestination(imageTopic)
+    );
+
     logNewImageFn.addToRolePolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
-        actions: ["dynamodb:PutItem"],
+        actions: ["dynamodb:PutItem", "dynamodb:DeleteItem"],
         resources: [imagesDatabaseTable.tableArn],
       })
     );
@@ -85,6 +112,14 @@ export class AppEdaStack extends cdk.Stack {
         effect: iam.Effect.ALLOW,
         actions: ["dynamodb:UpdateItem"],
         resources: [imagesDatabaseTable.tableArn],
+      })
+    );
+
+    removeInvalidImageFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ["s3:DeleteObject"],
+        resources: [`${imagesBucket.bucketArn}/*`],
       })
     );
 
