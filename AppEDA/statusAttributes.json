@@ -1,0 +1,6 @@
+{
+    "status_type": {
+        "DataType": "String",
+        "StringValue": "StatusUpdate"
+    }
+}

@@ -113,13 +113,21 @@ export class AppEdaStack extends cdk.Stack {
       new subs.SqsSubscription(imageProcessQueue)
     );
 
-    imageTopic.addSubscription(
-      new subs.LambdaSubscription(metadataUpdatingFn)
-    );
+    imageTopic.addSubscription(new subs.LambdaSubscription(metadataUpdatingFn, {
+      filterPolicy: {
+        metadata_type: sns.SubscriptionFilter.stringFilter({
+          allowlist: ["Caption"],
+        }),
+      },
+    }));
 
-    imageTopic.addSubscription(
-      new subs.LambdaSubscription(statusUpdatingFn)
-    );
+    imageTopic.addSubscription(new subs.LambdaSubscription(statusUpdatingFn, {
+      filterPolicy: {
+        status_type: sns.SubscriptionFilter.stringFilter({
+          allowlist: ["StatusUpdate"],
+        }),
+      },
+    }));
 
     imageTopic.addSubscription(
       new subs.SqsSubscription(mailerQueue)
