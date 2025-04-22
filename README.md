@@ -1,17 +1,19 @@
-# Distributed Systems CA2
+## Distributed Systems - Event-Driven Architecture.
 
-# Student Name: Troy Barrett
-# Student Number: 20098362
+__Name:__ Troy Barrett
+__Demo__: https://youtu.be/ujsXp9je_xs
 
-# Demo Video
-Link: https://youtu.be/ujsXp9je_xs
+This repository contains the implementation of a skeleton design for an application that manages a photo gallery, illustrated below. The app uses an event-driven architecture and is deployed on the AWS platform using the CDK framework for infrastructure provisioning.
 
-## Features
+![](./images/arch.png)
 
-- Log new Images - Implemented
-- Metadata updateing - Implemented
-- Invalid image removal - Implemented
-- Status Update Mailer - Implemented
-- Status updating - Implemented
-- Filtering - Implemented
-- Messaging - Implemented
+### Code Status.
+
+__Feature:__
++ Photographer:
+  + Log new Images - Completed
+  + Metadata updating - Completed
+  + Invalid image removal- Completed
+  + Status Update Mailer - Completed
++ Moderator
+  + Status updating - Completed
